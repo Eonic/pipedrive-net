@@ -20,6 +20,12 @@ namespace PipedriveNet.Endpoints
 
         public Task<List<TDeal>> All { get { return _client.Get<List<TDeal>>("deals"); } }
 
+
+        public Task<List<TDeal>> GetUserDeals(int userId)
+        {
+             return _client.Get<List<TDeal>>("persons/" + userId + "/deals"); 
+        }
+
         public Task<TDeal> GetById(int id)
         {
             return _client.Get<TDeal>("deals/" + id);
