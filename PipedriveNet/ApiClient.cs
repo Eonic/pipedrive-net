@@ -51,24 +51,34 @@ namespace PipedriveNet
             public T Data { get; set; }
 	    }
 
-	    async Task<T> Deserialize<T>(Task<HttpResponseMessage> resp)
-	    {
-            using (var stream = await (await resp).Content.ReadAsStreamAsync())
+        async Task<T> Deserialize<T>(Task<HttpResponseMessage> resp)
+        {
+            var response = await resp;
+            using (var stream = await response.Content.ReadAsStreamAsync())
+            using (var reader = new StreamReader(stream))
+            using (var jsonReader = new JsonTextReader(reader))
             {
+                try
+                {
+                    var container = Serializer.Deserialize<ResponseContainer<T>>(jsonReader);
+                    if (container == null)
+                        throw new PipedriveException("Failed to deserialize response.");
 
+                    if (!container.Success)
+                        throw new PipedriveException(container.Error);
 
-                var container = Serializer.Deserialize<ResponseContainer<T>>(new JsonTextReader(new StreamReader(stream)));
-                if (!container.Success)
-                    throw new PipedriveException(container.Error);
+                    if (container.Data == null && typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(List<>))
+                        container.Data = Activator.CreateInstance<T>();
 
-                //Replace null by empty list
-                if (container.Data == null && typeof(T).IsGenericType &&
-                    typeof(T).GetGenericTypeDefinition() == typeof(List<>))
-                    container.Data = Activator.CreateInstance<T>();
-
-                return container.Data;
+                    return container.Data;
+                }
+                catch (Exception e)
+                {
+                    // Consider logging e here
+                    return default(T);
+                }
             }
-	    }
+        }
         async Task<T> DeserializeTest<T>(Task<HttpResponseMessage> resp)
         {
             using (var stream = await (await resp).Content.ReadAsStreamAsync())
