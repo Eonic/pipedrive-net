@@ -18,7 +18,7 @@ namespace PipedriveNet.Endpoints
 
         public Task<List<TUser>> All
         {
-            get { return _client.Get<List<TUser>>("users"); }
+            get { return _client.Get<List<TUser>>("v1/users"); }
         }
 
         JObject PrepareUserData(string name, string email, bool active)
@@ -44,12 +44,12 @@ namespace PipedriveNet.Endpoints
         public Task<TUser> Create(string name, string email, bool active)
         {
 
-            return _client.Post<TUser>("users", PrepareUserData(name, email, active));
+            return _client.Post<TUser>("v1/users", PrepareUserData(name, email, active));
         }
 
         public Task<TUser> Update(int id, bool active)
         {
-            return _client.Put<TUser>("users/" + id, PrepareUserData(active));
+            return _client.Put<TUser>("v1/users/" + id, PrepareUserData(active));
         }
              
     }

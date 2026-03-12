@@ -15,6 +15,6 @@ namespace PipedriveNet.Endpoints
             _client = client;
         }
 
-        public Task<List<TPipeline>> All { get { return _client.Get<List<TPipeline>>("pipelines"); } }
+        public Task<List<TPipeline>> All { get { return _client.Get<List<TPipeline>>("v2/pipelines"); } }
     }
 }

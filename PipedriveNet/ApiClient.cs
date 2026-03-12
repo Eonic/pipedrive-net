@@ -22,9 +22,8 @@ namespace PipedriveNet
 	    internal readonly JsonSerializer Serializer = new JsonSerializer();
 
 	    internal readonly HttpClient HttpClient = new HttpClient();
-	    private const string ApiBase = "https://api.pipedrive.com/v1/";
-
-		public ApiClient(string apiKey, ContractResolver resolver)
+	    private const string ApiBase = "https://api.pipedrive.com/api/";
+        public ApiClient(string apiKey, ContractResolver resolver)
 		{
 			_apiKey = apiKey;
 		    _resolver = resolver;
@@ -44,39 +43,100 @@ namespace PipedriveNet
 	        return new Uri(ApiBase + endpoint + (endpoint.Contains("?") ? "&" : "?") + "api_token=" + _apiKey);
 	    }
 
-	    sealed class ResponseContainer<T>
-	    {
-	        public bool Success { get; set; }
-            public string Error { get; set; }
-            public T Data { get; set; }
-	    }
+		sealed class ResponseContainer<T>
+		{
+			public bool Success { get; set; }
+			public string Error { get; set; }
+			public T Data { get; set; }
+		}
+
+		internal sealed class SearchResultContainer<T>
+		{
+			public List<SearchResultItem<T>> Items { get; set; }
+		}
+
+		internal sealed class SearchResultItem<T>
+		{
+			public double result_score { get; set; }
+			public T item { get; set; }
+		}
 
         async Task<T> Deserialize<T>(Task<HttpResponseMessage> resp)
         {
             var response = await resp;
-            using (var stream = await response.Content.ReadAsStreamAsync())
-            using (var reader = new StreamReader(stream))
-            using (var jsonReader = new JsonTextReader(reader))
+            string rawJson = null;
+
+            try
             {
-                try
+                // Read the raw response content first for debugging
+                rawJson = await response.Content.ReadAsStringAsync();
+
+                // Check HTTP status code
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorMsg = $"HTTP {(int)response.StatusCode} {response.StatusCode}: {rawJson}";
+                    throw new PipedriveException(errorMsg);
+                }
+
+                using (var stringReader = new StringReader(rawJson))
+                using (var jsonReader = new JsonTextReader(stringReader))
                 {
                     var container = Serializer.Deserialize<ResponseContainer<T>>(jsonReader);
                     if (container == null)
-                        throw new PipedriveException("Failed to deserialize response.");
+                        throw new PipedriveException($"Failed to deserialize response. Raw JSON: {rawJson}");
 
                     if (!container.Success)
-                        throw new PipedriveException(container.Error);
+                        throw new PipedriveException($"API Error: {container.Error}. Raw JSON: {rawJson}");
 
                     if (container.Data == null && typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(List<>))
                         container.Data = Activator.CreateInstance<T>();
 
                     return container.Data;
                 }
-                catch (Exception e)
+            }
+            catch (ArgumentException argEx) when (argEx.Message.Contains("An item with the same key has already been added"))
+            {
+                // Duplicate key error - likely caused by custom_fields or dictionary deserialization
+                var errorDetails = $"Duplicate Key Error: {argEx.Message}\n" +
+                                 $"This error typically occurs when deserializing dictionaries with duplicate keys.\n" +
+                                 $"Check if the ContractResolver is causing property name collisions.\n" +
+                                 $"Type: {typeof(T).FullName}\n" +
+                                 $"Raw Response: {rawJson}";
+                throw new PipedriveException(errorDetails, argEx);
+            }
+            catch (JsonSerializationException jsonEx)
+            {
+                // JSON deserialization error - check if it's a custom_fields type mismatch
+                if (jsonEx.Message.Contains("custom_fields") && jsonEx.Message.Contains("List`1"))
                 {
-                    // Consider logging e here
-                    return default(T);
+                    var errorDetails = $"Custom Field Type Mismatch: A custom field is configured with a type that doesn't match the API response.\n" +
+                                     $"Error: {jsonEx.Message}\n" +
+                                     $"Hint: Check your Field() configurations for type mismatches. Ensure custom field types match the API response.\n" +
+                                     $"Raw Response (first 500 chars): {(rawJson?.Length > 500 ? rawJson.Substring(0, 500) + "..." : rawJson)}";
+                    throw new PipedriveException(errorDetails, jsonEx);
                 }
+                else
+                {
+                    var errorDetails = $"JSON Deserialization Error: {jsonEx.Message}\nRaw Response: {rawJson}";
+                    throw new PipedriveException(errorDetails, jsonEx);
+                }
+            }
+            catch (JsonException jsonEx)
+            {
+                // JSON deserialization error - store details for debugging
+                var errorDetails = $"JSON Deserialization Error: {jsonEx.Message}\nRaw Response: {rawJson}";
+                throw new PipedriveException(errorDetails, jsonEx);
+            }
+            catch (PipedriveException)
+            {
+                // Re-throw PipedriveException as-is
+                throw;
+            }
+            catch (Exception e)
+            {
+                // General error - include all details for debugging
+                var errorDetails = $"Unexpected Error: {e.Message}\nType: {e.GetType().Name}\nRaw Response: {rawJson}";
+                throw new PipedriveException(errorDetails, e);
             }
         }
         async Task<T> DeserializeTest<T>(Task<HttpResponseMessage> resp)
@@ -128,54 +188,78 @@ namespace PipedriveNet
         }
 
 
-        Task<T> Send<T>(string endpoint, HttpMethod method, object data)
-	    {
-            try {
-	            var ms = new MemoryStream();
-	            var jsonWriter = new JsonTextWriter(new StreamWriter(ms));
-                Serializer.Serialize(jsonWriter, data);
-                jsonWriter.Flush();
-	            ms.Seek(0, SeekOrigin.Begin);
+		async Task<T> Send<T>(string endpoint, HttpMethod method, object data)
+		{
+			HttpRequestMessage message = null;
+			string serializedData = null;
 
-	            var message = new HttpRequestMessage(method, GetUri(endpoint));
-	            if (data != null)
-	                message.Content = new StreamContent(ms)
-	                {
-	                    Headers = {ContentType = new MediaTypeHeaderValue("application/json") {CharSet = "utf-8"}}
-	                };
+			try {
+				var ms = new MemoryStream();
+				var jsonWriter = new JsonTextWriter(new StreamWriter(ms));
+				Serializer.Serialize(jsonWriter, data);
+				jsonWriter.Flush();
+				ms.Seek(0, SeekOrigin.Begin);
 
-                Task<HttpResponseMessage> returnValue = HttpClient.SendAsync(message);
-            
-                return Deserialize<T>(returnValue);
-            }
-            catch (System.Exception e)
-            {
-                string errMsg = e.Message;
-                return null;
+				// Capture serialized data for debugging
+				using (var sr = new StreamReader(ms, Encoding.UTF8, true, 1024, true))
+				{
+					serializedData = await sr.ReadToEndAsync();
+				}
+				ms.Seek(0, SeekOrigin.Begin);
 
-            }
-        }
+				message = new HttpRequestMessage(method, GetUri(endpoint));
+				if (data != null)
+					message.Content = new StreamContent(ms)
+					{
+						Headers = {ContentType = new MediaTypeHeaderValue("application/json") {CharSet = "utf-8"}}
+					};
 
-        Task<T> SendMultipart<T>(string endpoint, HttpMethod method, MultipartFormDataContent form)
+				var httpResponse = await HttpClient.SendAsync(message);
+				var result = await Deserialize<T>(Task.FromResult(httpResponse));
+
+				return result; // Breakpoint here to inspect result
+			}
+			catch (PipedriveException pex)
+			{
+				// PipedriveException already has detailed error info, re-throw
+				throw;
+			}
+			catch (System.Exception e)
+			{
+				var errorMsg = $"Send Error [{method} {endpoint}]:\nException: {e.Message}\nType: {e.GetType().Name}\nRequest Data: {serializedData}\nStack Trace: {e.StackTrace}";
+				throw new PipedriveException(errorMsg);
+			}
+			finally
+			{
+				message?.Dispose();
+			}
+		}
+
+        async Task<T> SendMultipart<T>(string endpoint, HttpMethod method, MultipartFormDataContent form)
         {
+            HttpRequestMessage message = null;
+
             try
             {
-                HttpClient httpClient = new HttpClient();
-            var message = new HttpRequestMessage(method, GetUri(endpoint));
+                message = new HttpRequestMessage(method, GetUri(endpoint));
+                var httpResponse = await HttpClient.PostAsync(message.RequestUri, form);
+                var result = await Deserialize<T>(Task.FromResult(httpResponse));
 
-             Task<HttpResponseMessage> returnValue = HttpClient.PostAsync(message.RequestUri, form);
-
-             Task<T> thisResponse = Deserialize<T>(returnValue);
-
-             return thisResponse;
-
-            httpClient.Dispose();
+                return result; // Breakpoint here to inspect result
+            }
+            catch (PipedriveException pex)
+            {
+                // PipedriveException already has detailed error info, re-throw
+                throw;
             }
             catch (System.Exception e)
             {
-                string errMsg = e.Message;
-                return null;
-
+                var errorMsg = $"SendMultipart Error [{method} {endpoint}]:\nException: {e.Message}\nType: {e.GetType().Name}\nStack Trace: {e.StackTrace}";
+                throw new PipedriveException(errorMsg);
+            }
+            finally
+            {
+                message?.Dispose();
             }
         }
 
@@ -196,9 +280,15 @@ namespace PipedriveNet
 
         }
 
-        public Task<T> Put<T>(string endpoint, object data)
-	    {
-            return Send<T>(endpoint, HttpMethod.Put, data);
-	    }
+		public Task<T> Put<T>(string endpoint, object data)
+		{
+			return Send<T>(endpoint, HttpMethod.Put, data);
+		}
+
+		public async Task<T> Patch<T>(string endpoint, object data)
+		{
+			var result = await Send<T>(endpoint, new HttpMethod("PATCH"), data);
+			return result; // Breakpoint can be set here to inspect result before returning
+		}
 	}
 }

@@ -19,7 +19,7 @@ namespace PipedriveNet.Endpoints
         
         public Task Delete(int id)
         {
-            return _client.Delete("activities/" + id);
+            return _client.Delete("v2/activities/" + id);
         }
 
         public Task<ActivityDto> Create(int dealId, string type, string subject, DateTime? due)
@@ -33,12 +33,12 @@ namespace PipedriveNet.Endpoints
                 req["due_date"] = due.Value.ToString("yyyy-MM-dd");
                 req["due_time"] = due.Value.ToString("hh:mm");
             }
-            return _client.Post<ActivityDto>("activities", req);
+            return _client.Post<ActivityDto>("v2/activities", req);
         }
 
         public Task<List<ActivityDto>> GetByDeal(int dealId)
         {
-            return _client.Get<List<ActivityDto>>("deals/" + dealId + "/activities?limit=9000");
+            return _client.Get<List<ActivityDto>>("v2/deals/" + dealId + "/activities?limit=9000");
         }
     }
 }

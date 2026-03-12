@@ -26,7 +26,7 @@ namespace PipedriveNet.Endpoints
                 req["person_id"] = personId;
             if (orgId.HasValue)
                 req["org_id"] = orgId;
-            return _client.Post<object>("notes", req);
+            return _client.Post<object>("v1/notes", req);
         }
     }
 }

@@ -18,22 +18,22 @@ namespace PipedriveNet.Endpoints
             _client = client;
         }
 
-        public Task<List<TDeal>> All { get { return _client.Get<List<TDeal>>("deals"); } }
+        public Task<List<TDeal>> All { get { return _client.Get<List<TDeal>>("v2/deals"); } }
 
 
         public Task<List<TDeal>> GetUserDeals(int userId)
         {
-             return _client.Get<List<TDeal>>("persons/" + userId + "/deals"); 
+             return _client.Get<List<TDeal>>("v2/persons/" + userId + "/deals"); 
         }
 
         public Task<TDeal> GetById(int id)
         {
-            return _client.Get<TDeal>("deals/" + id);
+            return _client.Get<TDeal>("v2/deals/" + id);
         }
 
         public Task<List<TDeal>> GetByPersonId(int personId, DealStatus? status = null)
         {
-            var ep = "persons/" + personId + "/deals";
+            var ep = "v2/persons/" + personId + "/deals";
             var qs = new QueryString() {{"limit", "9000"}};
             if (status != null)
                 qs["status"] = status.ToString().ToLower();
@@ -64,7 +64,19 @@ namespace PipedriveNet.Endpoints
                 {
                     req[_client.ResolveProperty(extra.Key)] = JToken.FromObject(extra.Value, _client.Serializer);
                 }
-            return _client.Post<TDeal>("deals", req);
+
+            if (extras != null && extras.Count > 0)
+			{
+				var customFields = new JObject();
+				foreach (var extra in extras)
+				{
+					customFields[_client.ResolveProperty(extra.Key)] = JToken.FromObject(extra.Value, _client.Serializer);
+				}
+				req["custom_fields"] = customFields;
+			}
+
+
+            return _client.Post<TDeal>("v2/deals", req);
         }
 
         public Task<TDeal> Update(int id, string title = null, DealStatus? status = null, int? stageId = null, string value = null)
@@ -78,17 +90,17 @@ namespace PipedriveNet.Endpoints
                 req["stage_id"] = stageId;
             if (value != null)
                 req["value"] = value;
-           return _client.Put<TDeal>("deals/" + id, req);
+           return _client.Patch<TDeal>("v2/deals/" + id, req);
         }
 
         public Task<TDeal> Merge(int id, int mergeWith)
         {
-            return _client.Put<TDeal>("deals/" + id + "/duplicate", new {MergeWithId = mergeWith});
+            return _client.Put<TDeal>("v2/deals/" + id + "/duplicate", new {MergeWithId = mergeWith});
         }
 
         public Task Delete(int id)
         {
-            return _client.Delete("deals/" + id);
+            return _client.Delete("v2/deals/" + id);
         }
     }
 }

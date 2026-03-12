@@ -3,23 +3,113 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 
 namespace PipedriveNet.Dto
 {
     public class DealDto
     {
-        public int Id { get; set; }
-        public string Title { get; set; }
-        public int StageId { get; set; }
-        public int PipelineId { get; set; }
-        public PersonIdDto PersonId { get; set; }
-        public DealStatus Status { get; set; }
-        public int Value { get; set; }
-        public DateTime AddTime { get; set; }
-        public DateTime? WonTime { get; set; }
-        public DateTime? LostTime { get; set; }
-        public DateTime? CloseTime { get; set; }
-        public DateTime? ExpectedCloseTime { get; set; }
+        // v2 API properties (lowercase/snake_case)
+        public int id { get; set; }
+        public string title { get; set; }
+        public int creator_user_id { get; set; }
+        public int owner_id { get; set; }
+        public decimal value { get; set; }
+        public int? person_id { get; set; }
+        public int? org_id { get; set; }
+        public int stage_id { get; set; }
+        public int pipeline_id { get; set; }
+        public string currency { get; set; }
+        public string archive_time { get; set; }
+        public string add_time { get; set; }
+        public string update_time { get; set; }
+        public string stage_change_time { get; set; }
+        public string status { get; set; }
+        public bool is_archived { get; set; }
+        public bool is_deleted { get; set; }
+        public int? probability { get; set; }
+        public string lost_reason { get; set; }
+        public int visible_to { get; set; }
+        public string close_time { get; set; }
+        public string won_time { get; set; }
+        public string lost_time { get; set; }
+        public string local_won_date { get; set; }
+        public string local_lost_date { get; set; }
+        public string local_close_date { get; set; }
+        public string expected_close_date { get; set; }
+        public List<int> label_ids { get; set; }
+        public string origin { get; set; }
+        public string origin_id { get; set; }
+        public int? channel { get; set; }
+        public string channel_id { get; set; }
+        public string source_lead_id { get; set; }
+        public decimal? acv { get; set; }
+        public decimal? arr { get; set; }
+        public decimal? mrr { get; set; }
+        public Dictionary<string, object> custom_fields { get; set; }
+
+        // Legacy v1 API properties for backward compatibility
+
+        [JsonIgnore]
+        public PersonIdDto PersonId
+        { 
+            get => person_id.HasValue ? new PersonIdDto { Value = person_id.Value } : null; 
+            set => person_id = value?.Value; 
+        }
+        [JsonIgnore]
+        public DealStatus Status
+        { 
+            get 
+            {
+                if (string.IsNullOrEmpty(status))
+                    return DealStatus.Open;
+
+                switch (status.ToLower())
+                {
+                    case "won":
+                        return DealStatus.Won;
+                    case "lost":
+                        return DealStatus.Lost;
+                    case "deleted":
+                        return DealStatus.Deleted;
+                    default:
+                        return DealStatus.Open;
+                }
+            }
+            set => status = value.ToString().ToLower();
+        }
+        [JsonIgnore]
+        public int Value { get => (int)value; set => this.value = value; }
+        [JsonIgnore]
+        public DateTime AddTime
+        { 
+            get => DateTime.TryParse(add_time, out var dt) ? dt : DateTime.MinValue;
+            set => add_time = value.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        [JsonIgnore]
+        public DateTime? WonTime
+        { 
+            get => DateTime.TryParse(won_time, out var dt) ? dt : (DateTime?)null;
+            set => won_time = value?.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        [JsonIgnore]
+        public DateTime? LostTime
+        { 
+            get => DateTime.TryParse(lost_time, out var dt) ? dt : (DateTime?)null;
+            set => lost_time = value?.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        [JsonIgnore]
+        public DateTime? CloseTime
+        { 
+            get => DateTime.TryParse(close_time, out var dt) ? dt : (DateTime?)null;
+            set => close_time = value?.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        [JsonIgnore]
+        public DateTime? ExpectedCloseTime
+        { 
+            get => DateTime.TryParse(expected_close_date, out var dt) ? dt : (DateTime?)null;
+            set => expected_close_date = value?.ToString("yyyy-MM-dd");
+        }
     }
 
     public enum DealStatus

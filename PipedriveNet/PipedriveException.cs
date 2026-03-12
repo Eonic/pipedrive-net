@@ -13,5 +13,9 @@ namespace PipedriveNet
         {
             
         }
+        public PipedriveException(string error, Exception ex) : base(error)
+        {
+
+        }
     }
 }

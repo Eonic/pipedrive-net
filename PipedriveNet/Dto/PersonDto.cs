@@ -1,17 +1,42 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace PipedriveNet.Dto
 {
 	public class PersonDto
 	{
-        public int Id { get; set; }
-        public OrganizationDto OrgId { get; set; }
-        public string Name { get; set; }
-        public string FistName { get; set; }
-        public string LastName { get; set; }
-        public List<PipedriveStringListItemDto> Email { get; set; }
-        public List<PipedriveStringListItemDto> Phone { get; set; }
-	}
+        public int id { get; set; }
+        public string type { get; set; }
+        public string name { get; set; }
+        public List<PhoneDto> phones { get; set; }
+        public List<EmailDto> emails { get; set; }
+        public string primary_email { get; set; }
+        public int visible_to { get; set; }
+        public OwnerDto owner { get; set; }
+        public OrganizationDto organization { get; set; }
+        public Dictionary<string, object> custom_fields { get; set; }
+        public List<string> notes { get; set; }
+        public string update_time { get; set; }
+    }
+
+    public class OwnerDto
+    {
+        public int id { get; set; }
+    }
+
+    public class EmailDto
+    {
+        public string label { get; set; }
+        public string value { get; set; }
+        public Boolean primary { get; set; }
+    }
+
+    public class PhoneDto
+    {
+        public string label { get; set; }
+        public string value { get; set; }
+        public Boolean primary { get; set; }
+    }
 
     /* TODO: Add remaining fields
      

@@ -16,6 +16,6 @@ namespace PipedriveNet.Endpoints
             _client = client;
         }
 
-        public Task<List<StageDto>> All { get { return _client.Get<List<StageDto>>("stages"); } }
+        public Task<List<StageDto>> All { get { return _client.Get<List<StageDto>>("v2/stages"); } }
     }
 }
